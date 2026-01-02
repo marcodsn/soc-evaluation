@@ -1,0 +1,3 @@
+[submodule "external/SOC-2508"]
+	path = external/SOC-2508
+	url = https://huggingface.co/datasets/marcodsn/SOC-2508
