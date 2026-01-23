@@ -4,10 +4,10 @@ Evaluation of the [Synthetic Online Conversations](https://huggingface.co/datase
 
 ## Exam-specific information (To Be Removed After the Exam)
 
-The project document filename is: `main.html`
-The presentation filename is: `slides.html`
+The project document filename is: `main.html`  
+The presentation filename is: `slides.html`  
 
-The main raw dataset is located in the `external/` folder as a submodule.
+The main raw dataset is located in the `external/` folder as a submodule.  
 The pre-processed dataset and the generated complementary datasets are located in the `data/` folder.
 
 ## How to get started
