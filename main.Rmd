@@ -1,0 +1,199 @@
+---
+title: "Structural and Lexical Analysis of Synthetic Multi-Agent Conversations"
+author: "Marco De Santis"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    theme: journal
+    toc: true
+    number_sections: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE)
+library(readr)
+library(dplyr)
+library(quanteda)
+library(quanteda.textstats)
+library(quanteda.textplots)
+library(ggplot2)
+library(koRpus)
+library(koRpus.lang.en)
+```
+
+# Introduzione
+La generazione di dati sintetici sta diventando un ambito di crescente importanza nell'era dell'Intelligenza Artificiale, in particolar modo per l'addestramento di modelli linguistici di grandi dimensioni (LLM).
+
+I dati conversazionali in particolare presentano sfide uniche, poiché spesso contengono informazioni sensibili che ne limitano l'uso e la condivisione. Per affrontare questo problema, la ricerca si sta spostando ora su sistemi multi-agente (MAS) in grado di generare conversazioni sintetiche tra agenti AI, simulando interazioni umane senza compromettere la privacy.
+
+Il dataset **SOC** (**Synthetic Online Conversations**, https://huggingface.co/datasets/marcodsn/SOC-2508) è un esempio di tale approccio. Basandomi su un recente studio (https://arxiv.org/abs/2503.17460), SOC è stato generato a partire da *Personas* (identità) ed *Experiences* (argomenti/situazioni) predefinite assegnate ad agenti AI per forzare interazioni diversificate.
+
+L'obiettivo di questa analisi è valutare la qualità di questi dati sintetici attraverso tre domande:
+
+* **Q1 (Lexical Diversity):** L'approccio multi-agente riesce a generare una diversità lessicale che supera i benchmark umani?
+* **Q2 (Statistical Bias):** Che tipo di "accento sintetico" o bias statistici emergono nel linguaggio generato rispetto a un corpus standard in inglese?
+* **Q3 (Network Structure):** Come si relazionano tra loro i concetti semantici all'interno delle conversazioni generate?
+
+# Metodologia
+Questa analisi utilizza tecniche di **Text Mining** per il profiling lessicale e di **Network Science** per l'analisi strutturale. Il linguaggio R è stato impiegato per l'analisi dei dati, mentre per gli step precedenti di generazione e pre-processing è stato utilizzato Python.
+
+* **Data Source:** Conversazioni sintetiche generate utilizzando una pipeline simil-ConvoGen (https://huggingface.co/datasets/marcodsn/SOC-2508).
+* **Main Libraries:**
+    * `koRpus`: Per misurare le metriche di diversità (MTLD).
+    * `quanteda`: Per l'analisi della frequenza, statistiche di keyness e generazione di reti semantiche.
+* **Benchmarks:** I risultati sono confrontati con benchmark umani (DailyDialog, EmpatheticDialogues) e un corpus di riferimento standard in inglese (generato sinteticamente, vedi [scripts/extra_01_en_most_used_words.py](https://github.com/marcodsn/soc-evaluation/blob/main/scripts/extra_01_en_most_used_words.py)).
+
+# Risultati dell’Analisi
+
+## 1. Diversità lessicale (MTLD)
+Per misurare la ricchezza del vocabolario, ho utilizzato la **Measure of Lexical Diversity (MTLD)**. A differenza della Type-Token Ratio (TTR), che degrada all’aumentare della lunghezza del testo, la MTLD è stabile e consente confronti affidabili tra conversazioni di diversa lunghezza.
+
+```{r mtld_calc}
+# Note: Il codice integrale è accessibile nel file 'scripts/02_measure_diversity.R'
+# Le principali parti di codice e i risultati sono riportati qui di seguito.
+
+# 1. Caricamento Dati
+data <- read_csv("data/processed/data.csv")
+
+# 2. Creazione Corpus Quanteda per statistiche generali
+chat_corpus <- corpus(data, text_field = "text")
+chat_tokens <- quanteda::tokens(chat_corpus, remove_punct = TRUE, remove_symbols = TRUE, remove_numbers = TRUE)
+chat_dfm <- dfm(chat_tokens)
+
+# Calcolo parole rare (Hapax Logomena, logica dallo script 03_words_analysis.R)
+freq_stats <- textstat_frequency(chat_dfm)
+rare_words <- freq_stats %>% filter(frequency == 1)
+num_rare <- nrow(rare_words)
+
+# 3. Calcolo MTLD (Logica dallo script 02_measure_diversity.R)
+# Funzione helper per koRpus
+get_mtld_korpus <- function(x) {
+  if(is.na(x) || nchar(x) == 0) return(NA)
+  tryCatch({
+    # Tokenize e calcolo MTLD
+    tagged <- tokenize(x, lang="en", format="obj")
+    return(MTLD(tagged)@MTLD$MTLD)
+  }, error=function(e) NA)
+}
+
+# Qui calcoliamo la media sui dati caricati.
+# data$mtld_score <- sapply(data$text, get_mtld_korpus)
+# observed_mtld <- mean(data$mtld_score, na.rm = TRUE)
+
+# Per fini dimostrativi, riportiamo direttamente i risultati pre-calcolati
+observed_mtld <- 159.81
+human_benchmark <- 53.44 # DailyDialog Benchmark
+synthetic_benchmark <- ~85 - 129 # OG ConvoGen
+```
+
+Risultati Hapax Logomena:
+
+* **Numero di parole rare (*hapax legomena*):** `r num_rare`
+* **Esempio di parole rare:** `r paste(head(rare_words$feature, 8), collapse = ", ")`
+
+Risultati MTLD:
+
+* **Valore osservato:** `r observed_mtld`
+* **Benchmark umano:** `r human_benchmark`
+* **Benchmark sintetico (ConvoGen originale):** tra ~85 e 129
+
+**Risultato principale:** Il dataset sintetico ha raggiunto una MTLD media pari a **159.81**, significativamente superiore sia alle baseline umane che a quella della pipeline originale di ConvoGen. Questo conferma che la strategia di iniezione delle *Seed Persona* e *Seed Experiences* riesce effettivamente a “forzare” il modello ad attingere a un ventaglio lessicale più ampio rispetto a un chatbot standard, tipicamente più ripetitivo. La presenza di **10,809 parole rare** (hapax legomena) rafforza ulteriormente l’evidenza di un’elevata diversità nel contenuto generato. **Tuttavia**, è importante notare come un valore MTLD così elevato possa in realtà sembrare fin troppo "innaturale": questo è dovuto al fatto gli LLM tendono a parlare di tutto ciò che gli viene richiesto nella *Seed Experience*, portando a un lessico estremamente variegato ma anche ad una chat molto "rushed"; è come se tutti i nostri agenti fossero esperti multi-settore con l'ADHD.
+
+## 2. Keyness e bias
+Nonostante l’alta diversità, è fondamentale comprendere *come* parla l’AI. Tramite `textstat_keyness`, ho confrontato le conversazioni sintetiche con un corpus standard di inglese, con l’obiettivo di identificare le parole statisticamente sovra-rappresentate.
+
+```{r keyness_viz, echo=TRUE, out.width="80%"}
+# Logica dallo script 04_corpus_comparison.R
+
+# 1. Caricamento Corpus di confronto (Inglese Generale)
+if(file.exists("data/raw/en_texts_dynamic.txt")){
+  gen_lines <- readLines("data/raw/en_texts_dynamic.txt")
+  gen_data <- data.frame(text = gen_lines, stringsAsFactors = FALSE)
+
+  # 2. Creazione e unione Corpora
+  corpus_chat <- corpus(data, text_field = "text")
+  docvars(corpus_chat, "Source") <- "Conversational"
+
+  corpus_gen <- corpus(gen_data, text_field = "text")
+  docvars(corpus_gen, "Source") <- "English_Corpus"
+
+  # Assegna nomi univoci ai documenti
+  docnames(corpus_chat) <- paste0("chat_", seq_len(ndoc(corpus_chat)))
+  docnames(corpus_gen)  <- paste0("gen_", seq_len(ndoc(corpus_gen)))
+
+  master_corpus <- corpus_chat + corpus_gen
+
+  # 3. Tokenizzazione e Grouping
+  master_tokens <- quanteda::tokens(master_corpus, remove_punct = TRUE, remove_symbols = TRUE, remove_numbers = TRUE)
+  master_dfm <- dfm(master_tokens)
+  dfm_grouped <- dfm_group(master_dfm, groups = docvars(master_corpus, "Source"))
+
+  # 4. Calcolo Keyness
+  keyness_stat <- textstat_keyness(dfm_grouped, target = "Conversational")
+
+  # 5. Visualizzazione
+  textplot_keyness(keyness_stat, n = 15, color = c("steelblue", "grey")) +
+    labs(title = "Distinctive Vocabulary (Keyness)",
+         subtitle = "Blue = Over-used in AI Chat | Grey = Over-used in General Corpus")
+} else {
+  print("File di corpus 'en_texts_dynamic.txt' non trovato. Impossibile generare il grafico di Keyness.")
+}
+```
+
+**Risultato principale:** L’analisi evidenzia un forte **“bias auto-referenziale”**. Le parole con Keyness più elevata (Chi2 > 10,000) includono *I, my, just, like,* e *Im*.
+
+**Interpretazione:** Questo è il risultato aspettato e sperato, dato che gli agenti sono stati progettati per simulare conversazioni umane in prima persona. Tuttavia, la sovra-rappresentazione di questi termini suggerisce che gli agenti tendono a focalizzarsi eccessivamente su se stessi, il che potrebbe essere percepito come innaturale o fastidioso in un contesto reale.
+Oltre a questo, la scarsità di termini specifici nella top-list di keyness suggerisce che il dataset non è "fissato" su un singolo argomento, ma spazia molto (coerente con l'alta diversità vista sopra). Un altro valore interessante è il risultato per il termine "of", estremamente sotto-rappresentato nel dataset conversationale rispetto al corpus generale;
+questo potrebbe indicare una tendenza a costruire frasi più brevi e dirette, e all'utilizzo di un linguaggio meno formale ma più colloquiale ("dad's car" invece di "the car of my dad").
+
+## 3. Network Science: struttura semantica
+Per rispondere alla Q3, ho costruito una **Feature Co-occurrence Matrix (FCM)**. Questo approccio genera una rete semantica in cui i nodi corrispondono alle parole più frequenti, mentre gli archi rappresentano la loro co-occorrenza entro una finestra di 5 parole. La tecnica permette di osservare la “struttura nascosta” dei temi conversazionali.
+
+```{r network_viz, echo=TRUE, out.width="100%"}
+# Logica dallo script 05_semantic_network.R
+
+# 1. Preprocessing specifico per Network
+# Rimuoviamo stopwords + filler comuni per vedere i topic reali
+custom_stopwords <- c(stopwords("en"),
+                      "just", "like", "im", "thats", "dont", "can", "cant",
+                      "one", "also", "really", "get", "go", "know", "think",
+                      "well", "see", "good", "got", "ve", "re", "ll", "ill",
+                      "said", "didnt", "back", "us", "yeah", "okay", "yes", "oh",
+                      "right", "sure", "maybe", "youre", "going", "want", "hes",
+                      "theyre", "isnt", "ive", "didnt", "would", "could", "much")
+tokens_net <- quanteda::tokens(chat_corpus, remove_punct = TRUE, remove_numbers = TRUE) %>%
+  tokens_tolower() %>%
+  tokens_remove(custom_stopwords)
+
+# 2. Creazione FCM (Feature Co-occurrence Matrix)
+# Finestra di 5 parole
+chat_fcm <- fcm(tokens_net, context = "window", window = 5, tri = FALSE)
+
+# Selezione top 50 features per leggibilità del grafico
+chat_dfm <- dfm(tokens_net)
+top_feats <- names(topfeatures(chat_dfm, 50))
+chat_fcm_select <- fcm_select(chat_fcm, pattern = top_feats)
+
+# 3. Plot della rete
+textplot_network(chat_fcm_select,
+                 min_freq = 50,
+                 edge_alpha = 0.4,
+                 edge_size = 2,
+                 edge_color = "grey70",
+                 vertex_labelsize = 5,
+                 vertex_labelcolor = "black",
+                 vertex_color = "steelblue")
+```
+
+**Risultato principale:** Il grafo mostra comunità concettuali distinte, con focus importante sui concetti legati al tempo e alle emozioni.
+Parole come *last* strettamente collegate a *night,* e *week* indicano che gli agenti discutono spesso di eventi passati; sono presenti anche collegamenti al presente e al futuro, ma appaiono meno importanti.
+Oltre ai concetti temporali, appaiono anche termini come *feels, sorry, emotional,* e *coffee* a formare una sorta di "collante sociale"; anche questo è un risultato atteso, dato che le *Seed Personas* e le *Seed Experiences* sono state progettate per simulare conversazioni empatiche.
+
+# Conclusione
+La pipeline di generazione sintetica multi-agente produce un dataset **“iper-diverso ma stilisticamente biased”**.
+
+1. **Successo in termini di diversità:** la MTLD pari a 159.81 dimostra che il sistema supera nettamente le baseline umane in ampiezza del vocabolario. Tuttavia, potrebbe essere utile esplorare tecniche per "ritardare" il cambio di argomento per rendere le conversazioni più naturali.
+2. **Criticità legata al bias:** la sovra-rappresentazione statistica di pronomi in prima persona (*I, my*) potrebbe suggerire la necessità di prompt di sistema più stringenti per ridurre l’auto-referenzialità, ma è a mio parere necessaria un'analisi più approfondita.
+3. **Coerenza strutturale:** l’analisi di rete conferma che i messaggi non sono “buttati lì”/random; al contrario, mantengono strutture semantiche robuste che connettono concetti emotivi e temporali.
+
+**Sviluppi futuri:** la prossima iterazione del dataset dovrà migliorare il sistema multi-agente per bilanciare meglio diversità e coerenza stilistica, magari introducendo metriche di “fluidità” conversazionale. Inoltre, un’analisi qualitativa delle conversazioni potrebbe fornire ulteriori spunti su come gli agenti interagiscono in modo più umano.

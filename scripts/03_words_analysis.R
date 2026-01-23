@@ -7,7 +7,7 @@ library(ggplot2)
 # 1. Load Data
 data <- read_csv("data/processed/data.csv")
 
-# 2. Create Quanteda Object (Better for frequency stats than koRpus)
+# 2. Create Quanteda Object
 # We treat the whole column as one corpus
 chat_corpus <- corpus(data, text_field = "text")
 # Specify the use of quanteda, just in case koRpus is still loaded in the session (it may cause conflict errors otherwise)
