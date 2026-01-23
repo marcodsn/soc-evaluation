@@ -1,6 +1,6 @@
 # soc-evaluation
 
-Evaluation of the Synthetic Online Conversations dataset, specifically targeting Lexical Diversity.
+Evaluation of the [Synthetic Online Conversations](https://huggingface.co/datasets/marcodsn/SOC-2508) dataset, specifically targeting Lexical Diversity.
 
 ## Exam-specific information (To Be Removed After the Exam)
 
@@ -29,4 +29,16 @@ cd soc-evaluation
 
 git submodule init
 git submodule update
+```
+
+## References
+
+```bibtex
+@misc{marcodsn_2025_SOC2508,
+  title     = {Synthetic Online Conversations},
+  author    = {Marco De Santis},
+  year      = {2025},
+  month     = {August},
+  url       = {https://huggingface.co/datasets/marcodsn/SOC-2508},
+}
 ```
